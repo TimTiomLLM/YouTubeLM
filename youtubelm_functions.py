@@ -2,29 +2,40 @@ import os
 import re
 import csv
 import openai
+import torch
+import nltk
+import numpy as np
+import faiss
+import PyPDF2
+
 from googleapiclient.discovery import build
 from youtube_transcript_api import YouTubeTranscriptApi
-from transformers import AutoModelForSequenceClassification, AutoTokenizer, TextClassificationPipeline
-import nltk
+from transformers import (
+    AutoModelForSequenceClassification,
+    AutoTokenizer,
+    TextClassificationPipeline
+)
 from nltk.sentiment.vader import SentimentIntensityAnalyzer
-import torch
+from sentence_transformers import SentenceTransformer
 
-# Download VADER lexicon if not already available
+# Download required resources
 nltk.download('vader_lexicon', quiet=True)
 
-# Set your API keys here
-YOUTUBE_API_KEY = "Insert your YouTube API key here"
-OPENAI_API_KEY = "Insert your OpenAI API key here"
+######################################
+# CONSTANTS & API KEYS
+######################################
+YOUTUBE_API_KEY = "AIzaSyAdfy19rpxdPiWzFdEanseFQb68HH9oheg"
+OPENAI_API_KEY = "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"
+
 openai.api_key = OPENAI_API_KEY
 
-#########################
-# Step 1: Data Retrieval
-#########################
+######################################
+# YOUTUBE DATA RETRIEVAL FUNCTIONS
+######################################
 
 def extract_video_id(url):
     """
     Extract the video ID from a YouTube URL.
-    Supports standard and shortened URLs.
     """
     regex = r"(?:v=|\/)([0-9A-Za-z_-]{11}).*"
     match = re.search(regex, url)
@@ -34,11 +45,11 @@ def extract_video_id(url):
         raise ValueError("Invalid YouTube URL provided.")
 
 def get_youtube_service():
-    """Create and return a YouTube service object using the API key."""
+    """Return a YouTube service object using the API key."""
     return build("youtube", "v3", developerKey=YOUTUBE_API_KEY)
 
 def fetch_video_title(video_id):
-    """Retrieve the video title using the YouTube Data API."""
+    """Retrieve the video title via YouTube Data API."""
     youtube = get_youtube_service()
     request = youtube.videos().list(part="snippet", id=video_id)
     response = request.execute()
@@ -47,7 +58,7 @@ def fetch_video_title(video_id):
     return None
 
 def fetch_video_comments(video_id, max_results=100):
-    """Fetch up to 'max_results' comments for the given video."""
+    """Fetch up to max_results comments for a given video."""
     youtube = get_youtube_service()
     comments = []
     request = youtube.commentThreads().list(
@@ -76,12 +87,12 @@ def fetch_video_comments(video_id, max_results=100):
 
 def fetch_video_transcript(video_id):
     """
-    Attempt to retrieve the video transcript.
-    If unavailable via the YouTube transcript API, this is where you could integrate a Whisper ASR.
+    Retrieve the video transcript using YouTubeTranscriptApi.
+    Returns None if unavailable.
     """
     try:
-        transcript_segments = YouTubeTranscriptApi.get_transcript(video_id)
-        transcript = " ".join(segment["text"] for segment in transcript_segments)
+        segments = YouTubeTranscriptApi.get_transcript(video_id)
+        transcript = " ".join(segment["text"] for segment in segments)
         return transcript
     except Exception as e:
         print(f"Transcript not available via API: {e}")
@@ -89,22 +100,21 @@ def fetch_video_transcript(video_id):
 
 def analyze_video(video_url):
     """
-    Given a YouTube video URL, fetch and return the video title, transcript, and comments.
+    Given a YouTube URL, return a dict with video_id, title, transcript, and comments.
     """
     video_id = extract_video_id(video_url)
     title = fetch_video_title(video_id)
     transcript = fetch_video_transcript(video_id)
     comments = fetch_video_comments(video_id)
-    return {
-        "video_id": video_id,
-        "title": title,
-        "transcript": transcript,
-        "comments": comments
-    }
+    return {"video_id": video_id, "title": title, "transcript": transcript, "comments": comments}
+
+######################################
+# CSV HELPER FUNCTIONS
+######################################
 
 def save_comments_to_csv(comments, filename="video_comments.csv"):
     """
-    Save a list of comment strings to a CSV file with a single column 'comment'.
+    Save a list of comment strings to a CSV file with header 'comment'.
     """
     with open(filename, "w", encoding="utf-8", newline="") as csvfile:
         writer = csv.writer(csvfile)
@@ -115,8 +125,7 @@ def save_comments_to_csv(comments, filename="video_comments.csv"):
 
 def load_comments_from_csv(filename="video_comments.csv"):
     """
-    Load comments from a CSV file and return them as a list of strings.
-    Assumes the CSV file has a header with the column 'comment'.
+    Load comments from a CSV file (assumes header 'comment').
     """
     comments = []
     with open(filename, "r", encoding="utf-8") as csvfile:
@@ -125,54 +134,48 @@ def load_comments_from_csv(filename="video_comments.csv"):
             comments.append(row["comment"])
     return comments
 
-#########################
-# Scoring System
-#########################
+######################################
+# SCORING SYSTEM FUNCTIONS
+######################################
 
-# Initialize the bias model
-bias_tokenizer = AutoTokenizer.from_pretrained("rinapch/distilbert-media-bias")
-bias_model = AutoModelForSequenceClassification.from_pretrained("rinapch/distilbert-media-bias")
+# Initialize the media bias model
+_bias_tokenizer = AutoTokenizer.from_pretrained("rinapch/distilbert-media-bias")
+_bias_model = AutoModelForSequenceClassification.from_pretrained("rinapch/distilbert-media-bias")
 
 def calculate_bias_score(transcript):
     """
-    Calculate a bias score for a transcript using a media bias classifier model.
-    The bias score is defined as the neutral probability.
-    If the transcript is empty, a neutral score of 0.5 is returned.
+    Calculate bias score (neutral probability) from transcript.
+    Returns 0.5 if transcript is empty.
     """
     if not transcript:
         return 0.5
-    inputs = bias_tokenizer(transcript, return_tensors="pt", truncation=True)
-    outputs = bias_model(**inputs)
+    inputs = _bias_tokenizer(transcript, return_tensors="pt", truncation=True)
+    outputs = _bias_model(**inputs)
     probabilities = torch.nn.functional.softmax(outputs.logits, dim=-1)
     neutral_probability = probabilities[0][1].item()  # assume index 1 is "Center"
     return max(0, min(1, neutral_probability))
 
 def calculate_misinformation_score(transcript):
     """
-    Calculate a misinformation score based on the transcript.
-    Here we use a dummy heuristic: count sentences with numerical claims.
+    Dummy heuristic: calculate score based on count of sentences with numerical claims.
     """
     if not transcript:
         return 0.5
     sentences = transcript.split(".")
     claim_sentences = [s for s in sentences if re.search(r"\d+", s)]
-    claim_count = len(claim_sentences)
-    score = claim_count / (len(sentences) + 1)
+    score = len(claim_sentences) / (len(sentences) + 1)
     return min(1, score)
 
 def calculate_toxic_score(comments):
     """
-    Calculate the average toxicity (non-toxic sentiment) score from the comments using a toxic-comment model.
-    Returns a normalized score between 0 and 1.
+    Calculate average non-toxicity score from comments using a toxic-comment model.
     """
     model_path = "martin-ha/toxic-comment-model"
     tox_tokenizer = AutoTokenizer.from_pretrained(model_path)
     tox_model = AutoModelForSequenceClassification.from_pretrained(model_path)
     pipeline = TextClassificationPipeline(model=tox_model, tokenizer=tox_tokenizer, return_all_scores=True)
-
     if not comments:
         return 0.5
-
     total_score = 0.0
     for comment in comments:
         results = pipeline(comment)
@@ -180,8 +183,7 @@ def calculate_toxic_score(comments):
             results = results[0]
         non_toxic_score = None
         for res in results:
-            label = res['label'].lower()
-            if label in ['non_toxic', 'non-toxic', 'clean']:
+            if res['label'].lower() in ['non_toxic', 'non-toxic', 'clean']:
                 non_toxic_score = res['score']
                 break
         if non_toxic_score is None:
@@ -196,11 +198,7 @@ def calculate_toxic_score(comments):
 
 def calculate_integrity_score(bias_score, misinformation_score, toxic_score):
     """
-    Combine the sub-scores into an overall integrity score (scale 1-10) using a weighted approach.
-    Weights:
-      - Bias: 40%
-      - Misinformation: 40%
-      - Toxicity (sentiment): 20%
+    Combine sub-scores into an overall integrity score (1-10) using weighted factors.
     """
     weighted = (bias_score * 0.4) + (misinformation_score * 0.4) + (toxic_score * 0.2)
     integrity_score = 1 + (weighted * 9)
@@ -210,30 +208,32 @@ def calculate_integrity_score(bias_score, misinformation_score, toxic_score):
                    f"Final integrity score: {integrity_score:.2f}/10.")
     return integrity_score, explanation
 
-#########################
-# Sentiment Analysis & Review Categorization
-#########################
+######################################
+# SENTIMENT ANALYSIS & REVIEW FUNCTIONS
+######################################
 
-# Sentiment analysis model for reviews
-sentiment_tokenizer = AutoTokenizer.from_pretrained('nlptown/bert-base-multilingual-uncased-sentiment')
-sentiment_model = AutoModelForSequenceClassification.from_pretrained('nlptown/bert-base-multilingual-uncased-sentiment')
+# Initialize sentiment analysis model
+_sentiment_tokenizer = AutoTokenizer.from_pretrained('nlptown/bert-base-multilingual-uncased-sentiment')
+_sentiment_model = AutoModelForSequenceClassification.from_pretrained('nlptown/bert-base-multilingual-uncased-sentiment')
 
 def analyze_sentiment(text):
-    """Get sentiment score from text using a BERT-based model (scale 1-5)."""
-    inputs = sentiment_tokenizer(text, return_tensors="pt", truncation=True, padding=True, max_length=512)
+    """
+    Get sentiment score (1-5) for text using a BERT-based sentiment model.
+    """
+    inputs = _sentiment_tokenizer(text, return_tensors="pt", truncation=True, padding=True, max_length=512)
     with torch.no_grad():
-        outputs = sentiment_model(**inputs)
+        outputs = _sentiment_model(**inputs)
     scores = outputs.logits.softmax(dim=1)
     return torch.argmax(scores).item() + 1
 
-def categorize_and_save_reviews(input_csv, good_reviews_csv, bad_reviews_csv):
+def categorize_and_save_reviews(input_csv, good_csv, bad_csv):
     """
-    Categorize comments from a CSV file into good and bad reviews based on sentiment score.
-    Writes two CSV files with an added 'sentiment_score' column.
+    Categorize comments from input CSV into good (score ≥ 3) and bad reviews.
+    Saves results into separate CSV files.
     """
     with open(input_csv, "r", encoding="utf-8") as infile, \
-         open(good_reviews_csv, "w", encoding="utf-8", newline="") as good_outfile, \
-         open(bad_reviews_csv, "w", encoding="utf-8", newline="") as bad_outfile:
+         open(good_csv, "w", encoding="utf-8", newline="") as good_outfile, \
+         open(bad_csv, "w", encoding="utf-8", newline="") as bad_outfile:
 
         reader = csv.DictReader(infile)
         fieldnames = reader.fieldnames + ["sentiment_score"]
@@ -250,29 +250,27 @@ def categorize_and_save_reviews(input_csv, good_reviews_csv, bad_reviews_csv):
                 good_writer.writerow(row)
             else:
                 bad_writer.writerow(row)
-    print(f"Sentiment analysis completed. Good reviews saved to {good_reviews_csv}, bad reviews saved to {bad_reviews_csv}.")
+    print(f"Sentiment analysis completed. Good reviews saved to {good_csv}, bad reviews saved to {bad_csv}.")
 
-def count_reviews(good_reviews_csv, bad_reviews_csv):
-    """Count the number of good and bad reviews from CSV files."""
+def count_reviews(good_csv, bad_csv):
+    """
+    Count the number of reviews in the good and bad CSV files.
+    """
     def count_rows(csv_file):
         with open(csv_file, "r", encoding="utf-8") as file:
             reader = csv.reader(file)
             next(reader)
             return sum(1 for _ in reader)
-    good_count = count_rows(good_reviews_csv)
-    bad_count = count_rows(bad_reviews_csv)
+    good_count = count_rows(good_csv)
+    bad_count = count_rows(bad_csv)
     print(f"Total Good Reviews: {good_count}")
     print(f"Total Bad Reviews: {bad_count}")
     return good_count, bad_count
 
-#########################
-# LLM Summarization & Video Ideas
-#########################
-
 def read_reviews(csv_file):
     """
-    Read reviews from a CSV file and return as a single text block.
-    Assumes the CSV file uses the column 'comment'.
+    Read comments from a CSV file and return a single text block.
+    (Assumes column 'comment'.)
     """
     reviews = []
     with open(csv_file, "r", encoding="utf-8") as file:
@@ -281,12 +279,18 @@ def read_reviews(csv_file):
             reviews.append(row.get("comment", "").strip())
     return " ".join(reviews)
 
+######################################
+# LLM SUMMARIZATION & VIDEO IDEA FUNCTIONS
+######################################
+
 def summarize_good(text, review_type):
-    """Use GPT-4o mini API to summarize good reviews."""
+    """
+    Summarize good reviews using GPT-4o mini.
+    """
     prompt = f"""
-You are a professional YouTube content strategist. Your task is to summarize the following {review_type} reviews.
-Identify recurring themes and patterns in the feedback. Highlight what resonates most with the audience.
-Provide a clear, structured summary of the main points in 3-4 sentences.
+You are a professional YouTube content strategist. Summarize the following {review_type} reviews.
+Highlight key patterns, insights, and audience sentiments.
+Provide a structured summary in 3-4 sentences.
 
 **Reviews:**
 {text}
@@ -301,24 +305,17 @@ Provide a clear, structured summary of the main points in 3-4 sentences.
     return response.choices[0].message.content
 
 def summarize_bad(text, bias_score, misinformation_score, toxic_score, review_type):
-    """Use GPT-4o mini API to summarize bad reviews and provide improvement areas."""
+    """
+    Summarize bad reviews and suggest improvement areas using GPT-4o mini.
+    """
     prompt = f"""
 You are a professional YouTube content strategist specializing in media integrity analysis.
-Your task is to summarize the following {review_type} reviews and analyze the integrity scores.
+Summarize the following {review_type} reviews and analyze the following scores:
+- Bias Score: {bias_score}
+- Misinformation Score: {misinformation_score}
+- Toxic Score: {toxic_score}
 
-**Reviews:**
-{text}
-
-**Analysis Parameters:**
-- Bias Score: {bias_score} (Higher indicates stronger bias)
-- Misinformation Score: {misinformation_score} (Higher indicates greater misinformation risk)
-- Toxic Score: {toxic_score} (Higher indicates greater toxicity)
-
-Your task:
-- Summarize key themes in 3-4 sentences.
-- Identify the top area for improving credibility and engagement.
-
-Provide your response in a clear, structured format.
+Provide a clear summary (3-4 sentences), list key areas for improvement, and give actionable recommendations.
     """
     response = openai.chat.completions.create(
         model="gpt-4o-mini",
@@ -330,4 +327,86 @@ Provide your response in a clear, structured format.
     return response.choices[0].message.content
 
 def generate_video_ideas(good_summary, bad_summary):
-    pass
+    """
+    Generate improved video ideas based on review summaries using GPT-4o mini.
+    """
+    prompt = f"""
+You are a YouTube content strategist. Based on the summaries below, generate 3 innovative video ideas.
+
+**Good Reviews Summary:**
+{good_summary}
+
+**Bad Reviews Summary:**
+{bad_summary}
+
+Provide each idea with a title and a brief explanation.
+    """
+    response = openai.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "system", "content": "You are an expert YouTube strategist."},
+            {"role": "user", "content": prompt}
+        ]
+    )
+    return response.choices[0].message.content
+
+######################################
+# RAG & MEMORY FUNCTIONS
+######################################
+
+def extract_pdf_text(file_path):
+    """Extract and return text from a PDF file."""
+    text = ""
+    with open(file_path, "rb") as f:
+        pdf_reader = PyPDF2.PdfReader(f)
+        for page in pdf_reader.pages:
+            page_text = page.extract_text()
+            if page_text:
+                text += page_text + "\n"
+    return text
+
+def chunk_text(text, chunk_size=200):
+    """
+    Split text into chunks of approximately chunk_size words.
+    """
+    words = text.split()
+    return [" ".join(words[i:i+chunk_size]) for i in range(0, len(words), chunk_size)]
+
+# Build vector index for RAG using SentenceTransformer and FAISS.
+_embedder = SentenceTransformer('all-MiniLM-L6-v2')
+_index = None
+_chunks = None
+
+def build_faiss_index(chunks):
+    """
+    Build and return a FAISS index for the given list of text chunks.
+    """
+    embeddings = _embedder.encode(chunks)
+    embedding_dim = embeddings.shape[1]
+    index = faiss.IndexFlatL2(embedding_dim)
+    index.add(np.array(embeddings, dtype=np.float32))
+    return index
+
+def retrieve_pdf_context(query, chunks, index, k=3):
+    """
+    Retrieve the k most relevant text chunks based on the query.
+    """
+    query_embedding = _embedder.encode([query])
+    distances, indices = index.search(np.array(query_embedding, dtype=np.float32), k)
+    retrieved = [chunks[idx] for idx in indices[0]]
+    return " ".join(retrieved)
+
+# Conversation Memory Functions
+
+conversation_history = []
+
+def update_conversation(role, content):
+    """Append a message to the conversation history."""
+    conversation_history.append({"role": role, "content": content})
+
+def build_memory_prompt(new_message):
+    """
+    Build a prompt from the conversation history and the new message.
+    """
+    history_text = "\n".join(f"{msg['role']}: {msg['content']}" for msg in conversation_history)
+    return history_text + f"\nuser: {new_message}\n"
