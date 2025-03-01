@@ -1,4 +1,5 @@
-# ![image](https://github.com/user-attachments/assets/210926e3-e393-4644-b870-2a6797c032b6)
+# ![image](https://github.com/user-attachments/assets/a7926355-c424-4d7b-ac87-512e2ca67e34)
+
 
 Project for Media Track in DLW2025
 
