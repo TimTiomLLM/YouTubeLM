@@ -1,4 +1,5 @@
-# ![image](https://github.com/user-attachments/assets/a7926355-c424-4d7b-ac87-512e2ca67e34)
+# ![image](https://github.com/user-attachments/assets/75d32bfb-a33c-4bf5-ba86-9ead7187ac0c)
+
 
 
 Project for Media Track in DLW2025
@@ -38,6 +39,8 @@ YouTubeLM is an intelligent platform designed for YouTubers and content creators
 
 4. **Interactive Dialogue**  
    - After generating the initial report, users can continue interacting with YouTubeLM via a web interface to discuss, refine, and further optimize the report.
+
+![image](https://github.com/user-attachments/assets/31cd6eea-d3eb-4e6b-9112-0df243701d9a)
 
 ---
 
