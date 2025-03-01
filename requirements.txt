@@ -1,0 +1,9 @@
+PyPDF2
+sentence-transformers
+faiss-cpu
+openai
+google-api-python-client
+youtube-transcript-api
+torch
+transformers
+nltk
