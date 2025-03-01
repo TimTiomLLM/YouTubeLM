@@ -1,4 +1,5 @@
-# YouTubeLM
+# ![image](https://github.com/user-attachments/assets/210926e3-e393-4644-b870-2a6797c032b6)
+
 Project for Media Track in DLW2025
 
 ## For Judges
