@@ -24,8 +24,8 @@ nltk.download('vader_lexicon', quiet=True)
 ######################################
 # CONSTANTS & API KEYS
 ######################################
-YOUTUBE_API_KEY = "AIzaSyAdfy19rpxdPiWzFdEanseFQb68HH9oheg"
-OPENAI_API_KEY = "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"
+YOUTUBE_API_KEY = "Enter your Youtube API Key here"
+OPENAI_API_KEY = "Enter your OpenAI API Key here"
 
 openai.api_key = OPENAI_API_KEY
 
