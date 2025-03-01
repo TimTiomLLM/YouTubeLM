@@ -3,6 +3,7 @@ Project for Media Track in DLW2025
 
 ## For Judges
 Please read the slide deck before reading this documentation. All core functions and helper modules are located in `youtubelm_functions.py`, while the main execution logic and Streamlit web interface are implemented in `app.py`. Please refer to these files for a detailed understanding of the project's functionality, and then watch the demostration video.
+- **Note: `bad_reviews.csv`, `good_reviews.csv`, `video_comments.csv` are not training data
 
 ## Introduction
 YouTubeLM is an intelligent platform designed for YouTubers and content creators. It extracts insights from video data to improve content quality and spark creative ideas. The platform retrieves video transcripts and comments from YouTube, analyzes sentiment and toxicity in comments, and performs bias analysis and fact-checking on transcripts. These analyses generate an overall integrity score and help classify comments into good and bad categories. Based on good comments and identified areas of improvement (derived from bad comments and integrity scores), YouTubeLM produces a creative ideation report for your next video. Additionally, this report is refined through a regulation-aware RAG (Retrieval-Augmented Generation) module. Users can also engage in an interactive conversation with YouTubeLM to discuss, refine, and explore further ideas.
