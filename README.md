@@ -108,5 +108,5 @@ When prompted, enter a YouTube video URL. The system will:
 
 ## Sample Output
 ![image](https://github.com/user-attachments/assets/b13dc7e5-e7b9-4334-88db-484008ff1b88)
-the higher the score, the greater the intergrity. For example, 0.05/1 means there are a lot of bias, while 0.92/100 means toxic comments are not much
+The higher the score, the greater the intergrity. For example, 0.05/1 means there are a lot of bias, while 0.92/100 means toxic comments are not much
 
