@@ -96,4 +96,6 @@ When prompted, enter a YouTube video URL. The system will:
 - **Produce a creative ideation report for your next video.
 - **Allow you to engage in an interactive dialogue to further discuss and refine the report
 
+## Sample Output
+![image](https://github.com/user-attachments/assets/b13dc7e5-e7b9-4334-88db-484008ff1b88)
 
