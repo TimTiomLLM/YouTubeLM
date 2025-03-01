@@ -13,8 +13,8 @@ import torch
 nltk.download('vader_lexicon', quiet=True)
 
 # Set your API keys here
-YOUTUBE_API_KEY = "AIzaSyAdfy19rpxdPiWzFdEanseFQb68HH9oheg"
-OPENAI_API_KEY = "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"
+YOUTUBE_API_KEY = "Youtube"
+OPENAI_API_KEY = "openai"
 openai.api_key = OPENAI_API_KEY
 
 #########################
