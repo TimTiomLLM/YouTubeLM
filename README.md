@@ -4,7 +4,7 @@
 Project for Media Track in DLW2025
 
 ## For Judges
-Please read the slide deck before reading this documentation. All core functions and helper modules are located in `youtubelm_functions.py`, while the main execution logic and Streamlit web interface are implemented in `app.py`. Please refer to these files for a detailed understanding of the project's functionality, and then watch the demostration video.
+Please read the slide deck before reading this documentation. All core functions and helper modules are located in `youtubelm_functions.py`, while the main execution logic and Streamlit web interface are implemented in `app.py`. Please refer to these files for a detailed understanding of the project's functionality, and then watch the demostration video. As a reminder, there is no API key inside, you have to use your own API key.
 - **Note: `bad_reviews.csv`, `good_reviews.csv`, `video_comments.csv` are not training data
 
 ## Introduction
@@ -65,9 +65,11 @@ YouTubeLM is an intelligent platform designed for YouTubers and content creators
 
 ## Technology Stack
 
-- **Programming Language:** Python  
+- **Programming Language:** Python
+- **Data Collection:** Youtube API 
 - **NLP & Analysis:** BERT, SentenceTransformer  
-- **Fact-Checking:** Fact Check API  
+- **Fact-Checking:** Google Fact Check API
+- **RAG(Retrieval-Augmented Generation)**
 - **Vector Search:** FAISS  
 - **Generation Models:** OpenAI API  
 - **Web Interface & Deployment:** Streamlit  
