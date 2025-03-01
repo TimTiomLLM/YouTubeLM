@@ -67,28 +67,24 @@ YouTubeLM is an intelligent platform designed for YouTubers and content creators
 ```bash
 git clone https://github.com/yourusername/YouTubeLM.git
 cd YouTubeLM
+```
 
-## 🚀 Installation
-
-### 1️⃣ Clone the Repository (no API key Included)
-```bash
-git clone <repository_url>
-cd <repository_directory>
-2. Install Dependencies
+### 2. Install Dependencies
 All required dependencies are listed in requirements.txt. Install them with:
 
-bash
-複製
+```bash
 pip install -r requirements.txt
-3. Run the Project
+```
+
+### 3. Run the Project
 YouTubeLM is deployed as a web application using Streamlit. Start the application with:
 
-bash
-複製
+```bash
 streamlit run app.py
+```
 This command launches YouTubeLM in your web browser, where you can enter a YouTube video URL and interact with the platform.
 
-4. Input Video URL
+### 4. Input Video URL
 When prompted, enter a YouTube video URL. The system will:
 
 Fetch the video transcript and comments.
